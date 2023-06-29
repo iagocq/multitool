@@ -1,11 +1,32 @@
 #!/bin/bash
 
-# Mount the sys, proc, tmpfs filesystems
-mount -t sysfs /sys /sys
-mount -t tmpfs /tmp /tmp
-mount -t proc /proc /proc
-mkdir -p /dev/pts
-mount -t devpts devpts /dev/pts
+if [ "$1" != nopivot ]; then
+	mount -t tmpfs none /newroot
+
+	echo "copying / to /newroot" > /dev/tty1
+	cp -r /bin /etc /lib /lib64 /root /sbin /usr /var /newroot
+
+	mkdir -p /newroot/{sys,tmp,proc,dev,mnt}
+	mount -t sysfs sysfs /newroot/sys
+	mount -t tmpfs tmpfs /newroot/tmp
+	mount -t proc proc /newroot/proc
+	mount --rbind /dev /newroot/dev
+	mkdir -p /newroot/dev/pts
+	mount -t devpts devpts /newroot/dev/pts
+
+	exec <> /newroot/dev/tty1 >&0 2>&1
+	mkdir -p /newroot/oldroot
+	echo "pivot root"
+	pivot_root /newroot /newroot/oldroot
+	exec chroot / /sbin/init nopivot
+else
+    echo "on new root"
+	umount -R /oldroot
+fi
+
+ln -s /proc/self/fd /dev/fd
+
+grep droptoshell /proc/cmdline > /dev/null && bash
 
 # Touch /tmp/resolv.conf, to let dhclient-script work correctly
 touch /tmp/resolv.conf
@@ -20,10 +41,10 @@ touch /tmp/resolv.conf
 /sbin/ifconfig eth0:1 169.254.120.120/16 
 
 # Run dhclient in daemon mode
-/sbin/dhclient -lf /tmp/dhclient.leases -pf /tmp/dhclient.pid -nw eth0
+# /sbin/dhclient -lf /tmp/dhclient.leases -pf /tmp/dhclient.pid -nw eth0
 
 # Start ntp client daemon
-ntpd -g -G
+# ntpd -g -G
 
 # Launch dropbear in daemon mode
 /usr/sbin/dropbear -B -b /etc/dropbear/banner
@@ -58,32 +79,28 @@ if [ -b "${DEVICE_FAT_PARTITION}" ]; then
 
 	if [ $DIFF_SPACE -gt $MAX_DIFF_SPACE ]; then
 
-		dialog --infobox "Please wait some seconds, resizing FAT partition..." 5 60 <> /dev/tty1 >&0 2>&1
+		echo "Please wait some seconds, resizing FAT partition..."
 
 		fatresize -s $(($SPARE_SPACE - $THRES_DIFF_SPACE))ki "${DEVICE_FAT_PARTITION}"
 
 		ERR=$?
 
 		if [ $ERR -ne 0 ]; then
-			dialog --msgbox "Could not resize FAT partition, error $ERR occurred" 7 60 <> /dev/tty1 >&0 2>&1
+			echo "Could not resize FAT partition, error $ERR occurred"
 		fi
 
 	fi
 
 fi
 
-# Mount the FAT partition to write dmesg log on it,
-# then immediately unmounts it
+# Mount the FAT partition to write dmesg log on it
 mount "$DEVICE_FAT_PARTITION" "/mnt"
 if [[ $? -eq 0 ]]; then
 	dmesg > /mnt/dmesg.multitool.log
-	umount "/mnt"
 fi
 
-if [[ -f /usr/local/bin/multitool.sh ]]; then
-	while true; do
-		setsid /bin/bash /usr/local/bin/multitool.sh <> /dev/tty1 >&0 2>&1	
-	done
+if [[ -f /usr/local/bin/flasher.sh ]]; then
+	setsid /bin/bash /usr/local/bin/flasher.sh <> /dev/tty1 >&0 2>&1
 fi
 
 while true; do

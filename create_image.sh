@@ -313,6 +313,8 @@ if [ $? -ne 0 ]; then
 	echo "Could not store TARGET to partition"
 fi
 
+cp "${CWD}/flash.conf" "${TEMP_DIR}/flash.conf"
+
 echo "Unmount FAT32 partition"
 umount "$FAT_PARTITION" >/dev/null 2>&1
 

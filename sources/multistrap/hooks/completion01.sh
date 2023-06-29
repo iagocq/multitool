@@ -61,12 +61,13 @@ chmod 640 "$ROOTFS_DIR/etc/dropbear/dropbear_ecdsa_host_key.pub"
 
 cp init "$ROOTFS_DIR/sbin/init"
 mkdir -p "$ROOTFS_DIR/usr/local/bin"
-cp multitool.sh "$ROOTFS_DIR/usr/local/bin"
+cp flasher.sh "$ROOTFS_DIR/usr/local/bin"
 
 chmod +x "$ROOTFS_DIR/sbin/init"
-chmod +x "$ROOTFS_DIR/usr/local/bin/multitool.sh"
+chmod +x "$ROOTFS_DIR/usr/local/bin/flasher.sh"
 
 mkdir -p "$ROOTFS_DIR/mnt"
+mkdir -p "$ROOTFS_DIR/newroot"
 
 # Once we're in chroot, root / directory is rootfs
 chroot rootfs /bin/qemu-arm-static /bin/bash /tmp/configure.sh
