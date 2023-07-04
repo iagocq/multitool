@@ -62,9 +62,11 @@ chmod 640 "$ROOTFS_DIR/etc/dropbear/dropbear_ecdsa_host_key.pub"
 cp init "$ROOTFS_DIR/sbin/init"
 mkdir -p "$ROOTFS_DIR/usr/local/bin"
 cp flasher.sh "$ROOTFS_DIR/usr/local/bin"
+cp liveboot.sh "$ROOTFS_DIR/usr/local/bin"
 
 chmod +x "$ROOTFS_DIR/sbin/init"
 chmod +x "$ROOTFS_DIR/usr/local/bin/flasher.sh"
+chmod +x "$ROOTFS_DIR/usr/local/bin/liveboot.sh"
 
 mkdir -p "$ROOTFS_DIR/mnt"
 mkdir -p "$ROOTFS_DIR/newroot"

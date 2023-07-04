@@ -1,96 +1,136 @@
 #!/bin/bash
 
-if [ "$1" != nopivot ]; then
-	mount -t tmpfs none /newroot
+resize_fat() {
+	# Check if the fat partition requires a resize
 
-	echo "copying / to /newroot" > /dev/tty1
-	cp -r /bin /etc /lib /lib64 /root /sbin /usr /var /newroot
+	CLASS_FAT_PARTITION="/sys/class/block/$(lsblk -n -o KNAME $DEVICE_FAT_PARTITION)" # eg: /sys/class/block/mmcblk0p2
+	CLASS_BOOT_DEVICE="/sys/class/block/$(lsblk -n -o PKNAME $DEVICE_FAT_PARTITION)" # eg: /sys/class/block/mmcblk0
 
-	mkdir -p /newroot/{sys,tmp,proc,dev,mnt}
-	mount -t sysfs sysfs /newroot/sys
-	mount -t tmpfs tmpfs /newroot/tmp
-	mount -t proc proc /newroot/proc
-	mount --rbind /dev /newroot/dev
-	mkdir -p /newroot/dev/pts
-	mount -t devpts devpts /newroot/dev/pts
+	if [ -b "${DEVICE_FAT_PARTITION}" ]; then
 
-	exec <> /newroot/dev/tty1 >&0 2>&1
-	mkdir -p /newroot/oldroot
-	echo "pivot root"
-	pivot_root /newroot /newroot/oldroot
-	exec chroot / /sbin/init nopivot
+		MAX_DIFF_SPACE=$((1024 * 1024)) # a difference in spare space greater than this amount
+						# triggers a resize (1 GB)
+
+		THRES_DIFF_SPACE=$((128 * 1024)) # fill the FAT partition up to this space (max - 128 MB)
+
+		FAT_PARTITION_START=$(cat "$CLASS_FAT_PARTITION/start") # sectors
+		FAT_PARTITION_SIZE=$(cat "$CLASS_FAT_PARTITION/size") # sectors
+
+		DEVICE_SIZE=$(cat "$CLASS_BOOT_DEVICE/size")
+		SPARE_SPACE=$(($DEVICE_SIZE - $FAT_PARTITION_START))
+
+		SPARE_SPACE=$(($DEVICE_SIZE / 2)) # sectors / 2 = kbytes
+		FAT_PARTITION_SIZE=$(($FAT_PARTITION_SIZE / 2)) # sectors / 2 = kbytes
+
+		DIFF_SPACE=$(($SPARE_SPACE - $FAT_PARTITION_SIZE))
+
+		if [ $DIFF_SPACE -gt $MAX_DIFF_SPACE ]; then
+
+			echo "Please wait some seconds, resizing FAT partition..."
+
+			fatresize -s $(($SPARE_SPACE - $THRES_DIFF_SPACE))ki "${DEVICE_FAT_PARTITION}"
+
+			ERR=$?
+
+			if [ $ERR -ne 0 ]; then
+				echo "Could not resize FAT partition, error $ERR occurred"
+			fi
+
+		fi
+	fi
+}
+
+setup_net() {
+	# Touch /tmp/resolv.conf, to let dhclient-script work correctly
+	touch /tmp/resolv.conf
+
+	# Set the hostname
+	/bin/hostname -F /etc/hostname
+
+	# Raise network interface
+	/sbin/ifconfig eth0 up
+
+	# Provide a fixed link-local address to eth0:1 virtual interface (give 5 seconds timeout
+	/sbin/ifconfig eth0:1 169.254.120.120/16 
+
+	# Run dhclient in daemon mode
+	/sbin/dhclient -lf /tmp/dhclient.leases -pf /tmp/dhclient.pid -nw eth0
+
+	# Start ntp client daemon
+	# ntpd -g -G
+
+	# Launch dropbear in daemon mode
+	/usr/sbin/dropbear -B -b /etc/dropbear/banner
+}
+
+drop_to_shell() {
+	echo "dropping to shell"
+	bash
+	echo "back to init..."
+}
+
+on_newroot="$1"
+
+if [ ! "$on_newroot" ]; then
+    mount -t proc proc /proc
+fi
+
+for x in $(cat /proc/cmdline); do
+	case $x in
+	copytomem)
+		copytomem=1
+		;;
+	program=*)
+		program=${x#program=}
+		;;
+	liveboot-stage2)
+		liveboot_stage2=1
+		;;
+	esac
+done
+
+if [ "$copytomem" ]; then
+	if [ "$on_newroot" ]; then
+		echo "on new root"
+		umount -R /oldroot
+	else
+	    umount /proc
+		mount -t tmpfs none /newroot
+
+		echo "copying / to /newroot" > /dev/tty1
+		cp -r /bin /etc /lib /lib64 /root /sbin /usr /var /newroot
+
+		mkdir -p /newroot/{sys,tmp,proc,dev,mnt}
+		mount -t sysfs sysfs /newroot/sys
+		mount -t tmpfs tmpfs /newroot/tmp
+		mount -t proc proc /newroot/proc
+		mount --rbind /dev /newroot/dev
+		mkdir -p /newroot/dev/pts
+		mount -t devpts devpts /newroot/dev/pts
+
+		exec <> /newroot/dev/tty1 >&0 2>&1
+		mkdir -p /newroot/oldroot
+		echo "pivot root"
+		pivot_root /newroot /newroot/oldroot
+		exec chroot / /sbin/init newroot
+	fi
 else
-    echo "on new root"
-	umount -R /oldroot
+	exec <> /dev/tty1 >&0 2>&1
 fi
 
 ln -s /proc/self/fd /dev/fd
-
-grep droptoshell /proc/cmdline > /dev/null && bash
-
-# Touch /tmp/resolv.conf, to let dhclient-script work correctly
-touch /tmp/resolv.conf
-
-# Set the hostname
-/bin/hostname -F /etc/hostname
-
-# Raise network interface
-/sbin/ifconfig eth0 up
-
-# Provide a fixed link-local address to eth0:1 virtual interface (give 5 seconds timeout
-/sbin/ifconfig eth0:1 169.254.120.120/16 
-
-# Run dhclient in daemon mode
-# /sbin/dhclient -lf /tmp/dhclient.leases -pf /tmp/dhclient.pid -nw eth0
-
-# Start ntp client daemon
-# ntpd -g -G
-
-# Launch dropbear in daemon mode
-/usr/sbin/dropbear -B -b /etc/dropbear/banner
 
 # Spawn a shell on ttyS2 serial port, always available
 #setsid getty --autologin root ttyS2 &
 getty --autologin root ttyS2 &
 
-# Check if the fat partition requires a resize
 DEVICE_FAT_PARTITION=$(blkid --label "MULTITOOL" -l) # eg: /dev/mmcblk0p2
+resize_fat
 
-CLASS_FAT_PARTITION="/sys/class/block/$(lsblk -n -o KNAME $DEVICE_FAT_PARTITION)" # eg: /sys/class/block/mmcblk0p2
-CLASS_BOOT_DEVICE="/sys/class/block/$(lsblk -n -o PKNAME $DEVICE_FAT_PARTITION)" # eg: /sys/class/block/mmcblk0
+setup_net
 
-if [ -b "${DEVICE_FAT_PARTITION}" ]; then
-
-	MAX_DIFF_SPACE=$((1024 * 1024)) # a difference in spare space greater than this amount
-					# triggers a resize (1 GB)
-
-	THRES_DIFF_SPACE=$((128 * 1024)) # fill the FAT partition up to this space (max - 128 MB)
-	
-	FAT_PARTITION_START=$(cat "$CLASS_FAT_PARTITION/start") # sectors
-	FAT_PARTITION_SIZE=$(cat "$CLASS_FAT_PARTITION/size") # sectors
-
-	DEVICE_SIZE=$(cat "$CLASS_BOOT_DEVICE/size")
-	SPARE_SPACE=$(($DEVICE_SIZE - $FAT_PARTITION_START))
-
-	SPARE_SPACE=$(($DEVICE_SIZE / 2)) # sectors / 2 = kbytes
-	FAT_PARTITION_SIZE=$(($FAT_PARTITION_SIZE / 2)) # sectors / 2 = kbytes
-
-	DIFF_SPACE=$(($SPARE_SPACE - $FAT_PARTITION_SIZE))
-
-	if [ $DIFF_SPACE -gt $MAX_DIFF_SPACE ]; then
-
-		echo "Please wait some seconds, resizing FAT partition..."
-
-		fatresize -s $(($SPARE_SPACE - $THRES_DIFF_SPACE))ki "${DEVICE_FAT_PARTITION}"
-
-		ERR=$?
-
-		if [ $ERR -ne 0 ]; then
-			echo "Could not resize FAT partition, error $ERR occurred"
-		fi
-
-	fi
-
+if [ "$droptoshell" ]; then
+	drop_to_shell
 fi
 
 # Mount the FAT partition to write dmesg log on it
@@ -99,8 +139,12 @@ if [[ $? -eq 0 ]]; then
 	dmesg > /mnt/dmesg.multitool.log
 fi
 
-if [[ -f /usr/local/bin/flasher.sh ]]; then
-	setsid /bin/bash /usr/local/bin/flasher.sh <> /dev/tty1 >&0 2>&1
+if [ "$program" = "liveboot" -a "$liveboot_stage2" ]; then
+	/usr/local/bin/liveboot.sh stage2
+elif [ "$program" = "liveboot" ]; then
+	/usr/local/bin/liveboot.sh stage1
+elif [ "$autoflash" = "autoflash" ]; then
+	/usr/local/bin/flasher.sh
 fi
 
 while true; do

@@ -8,11 +8,14 @@ else
 fi
 
 while [ -z "$output" -o ! -e "$output" ]; do
+    if [ "$output" = droptoshell ]; then
+        bash
+    else
+        echo "$output does not exist! Type droptoshell to get access to the shell"
+    fi
     lsblk
-    echo "$output does not exist!"
     echo -n "path: "
     read output
-    [ "$output" = droptoshell ] && bash
 done
 
 file_size=0
@@ -20,9 +23,6 @@ file_command=""
 
 rm -f comm comm2
 mkfifo comm comm2
-
-dhclient -cf <(echo 'timeout 10')
-
 
 if [ $? = 2 ]; then
     echo "no ip"
@@ -35,6 +35,9 @@ get_file_info() {
     if [[ "$file" == http* ]]; then
         file_size=$(curl -LsI "$file" | grep -i Content-Length | awk '{print $2}' | tr -d '\r')
         file_command="curl -Ls '$file'"
+    elif [[ "$file" == *.gz ]]; then
+        file_size=$(gunzip -l "$file" | tail -1 | awk '{print $2}')
+        file_command="cat '$file' | gunzip"
     else
         file_size=$(wc -c "$file" | awk '{print $1}')
         file_command="cat '$file'"
