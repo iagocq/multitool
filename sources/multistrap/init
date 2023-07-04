@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 
 resize_fat() {
 	# Check if the fat partition requires a resize
@@ -69,25 +69,45 @@ drop_to_shell() {
 	echo "back to init..."
 }
 
-on_newroot="$1"
+do_resize_fat=1
+do_net_setup=1
+
+old_args=""
+while [ $# -gt 0 ]; do
+	old_args="$old_args $1"
+	case $1 in
+	copytomem)
+		copytomem=1
+		;;
+	livebootstage2)
+		livebootstage2=1
+		;;
+	init_verbose)
+		init_verbose=1
+		;;
+	droptoshell)
+		drop_to_shell=1
+		;;
+	newroot)
+		on_newroot=1
+		;;
+	no_resize_fat)
+		do_resize_fat=0
+		;;
+	no_net_setup)
+		do_net_setup=0
+		;;
+	esac
+	shift
+done
 
 if [ ! "$on_newroot" ]; then
     mount -t proc proc /proc
 fi
 
-for x in $(cat /proc/cmdline); do
-	case $x in
-	copytomem)
-		copytomem=1
-		;;
-	program=*)
-		program=${x#program=}
-		;;
-	liveboot-stage2)
-		liveboot_stage2=1
-		;;
-	esac
-done
+if [ "$init_verbose" ]; then
+	set -x
+fi
 
 if [ "$copytomem" ]; then
 	if [ "$on_newroot" ]; then
@@ -112,9 +132,15 @@ if [ "$copytomem" ]; then
 		mkdir -p /newroot/oldroot
 		echo "pivot root"
 		pivot_root /newroot /newroot/oldroot
-		exec chroot / /sbin/init newroot
+		exec chroot / /sbin/init newroot $old_args
 	fi
 else
+	mount -t sysfs sys /sys
+	mount -t tmpfs tmp /tmp
+	mount -t proc proc /proc
+	mkdir -p /dev/pts
+	mount -t devpts devpts /dev/pts
+
 	exec <> /dev/tty1 >&0 2>&1
 fi
 
@@ -125,13 +151,9 @@ ln -s /proc/self/fd /dev/fd
 getty --autologin root ttyS2 &
 
 DEVICE_FAT_PARTITION=$(blkid --label "MULTITOOL" -l) # eg: /dev/mmcblk0p2
-resize_fat
-
-setup_net
-
-if [ "$droptoshell" ]; then
-	drop_to_shell
-fi
+[ "$do_resize_fat" = 1 ] && resize_fat
+[ "$do_setup_net" = 1 ] && setup_net
+[ "$droptoshell" ] && drop_to_shell
 
 # Mount the FAT partition to write dmesg log on it
 mount "$DEVICE_FAT_PARTITION" "/mnt"
@@ -139,12 +161,12 @@ if [[ $? -eq 0 ]]; then
 	dmesg > /mnt/dmesg.multitool.log
 fi
 
-if [ "$program" = "liveboot" -a "$liveboot_stage2" ]; then
-	/usr/local/bin/liveboot.sh stage2
+if [ "$livebootstage2" ]; then
+	/usr/local/box-tools/liveboot.sh stage2
 elif [ "$program" = "liveboot" ]; then
-	/usr/local/bin/liveboot.sh stage1
-elif [ "$autoflash" = "autoflash" ]; then
-	/usr/local/bin/flasher.sh
+	/usr/local/box-tools/liveboot.sh stage1
+elif [ "$program" = "autoflash" ]; then
+	/usr/local/box-tools/flasher.sh
 fi
 
 while true; do
