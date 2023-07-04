@@ -60,14 +60,14 @@ chmod 640 "$ROOTFS_DIR/etc/dropbear/dropbear_dss_host_key.pub"
 chmod 640 "$ROOTFS_DIR/etc/dropbear/dropbear_ecdsa_host_key.pub"
 
 cp init "$ROOTFS_DIR/sbin/init"
-mkdir -p "$ROOTFS_DIR/usr/local/bin"
-cp flasher.sh "$ROOTFS_DIR/usr/local/bin"
+cp -r box-tools "$ROOTFS_DIR/usr/local"
 
 chmod +x "$ROOTFS_DIR/sbin/init"
-chmod +x "$ROOTFS_DIR/usr/local/bin/flasher.sh"
+chmod -R +x "$ROOTFS_DIR/usr/local/box-tools"
 
 mkdir -p "$ROOTFS_DIR/mnt"
 mkdir -p "$ROOTFS_DIR/newroot"
+ln -s /proc/mounts "$ROOTFS_DIR/etc/mtab"
 
 # Once we're in chroot, root / directory is rootfs
 chroot rootfs /bin/qemu-arm-static /bin/bash /tmp/configure.sh
