@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 
+. /usr/local/box-tools/utils.sh
+
 if [ -e "/mnt/flash.conf" ]; then
     source /mnt/flash.conf
     [[ -n "$file" && "$file" != http* ]] && file="/mnt/$file"
 else
     echo "/mnt/flash.conf is missing"
 fi
+
+debugshell "after flash.conf"
 
 while [ -z "$output" -o ! -e "$output" ]; do
     if [ "$output" = droptoshell ]; then
@@ -26,7 +30,7 @@ mkfifo comm comm2
 
 if [ $? = 2 ]; then
     echo "no ip"
-else
+elif [ "$server_ip" -a "$server_port" ];
     nc "$server_ip" "$server_port" < comm &
     nc_proc=$!
 fi
@@ -64,4 +68,4 @@ done < comm2 >> comm
 
 echo done
 sleep 1
-kill $nc_proc
+[ "$nc_proc" ] && kill $nc_proc

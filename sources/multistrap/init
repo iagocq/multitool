@@ -1,4 +1,6 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
+
+. /usr/local/box-tools/utils.sh
 
 resize_fat() {
 	# Check if the fat partition requires a resize
@@ -70,7 +72,7 @@ drop_to_shell() {
 }
 
 do_resize_fat=1
-do_net_setup=1
+do_setup_net=1
 
 old_args=""
 while [ $# -gt 0 ]; do
@@ -86,7 +88,7 @@ while [ $# -gt 0 ]; do
 		init_verbose=1
 		;;
 	droptoshell)
-		drop_to_shell=1
+		droptoshell=1
 		;;
 	newroot)
 		on_newroot=1
@@ -94,8 +96,8 @@ while [ $# -gt 0 ]; do
 	no_resize_fat)
 		do_resize_fat=0
 		;;
-	no_net_setup)
-		do_net_setup=0
+	no_setup_net)
+		do_setup_net=0
 		;;
 	esac
 	shift
@@ -103,10 +105,6 @@ done
 
 if [ ! "$on_newroot" ]; then
     mount -t proc proc /proc
-fi
-
-if [ "$init_verbose" ]; then
-	set -x
 fi
 
 if [ "$copytomem" ]; then
@@ -161,12 +159,13 @@ if [[ $? -eq 0 ]]; then
 	dmesg > /mnt/dmesg.multitool.log
 fi
 
+debugshell "before program"
 if [ "$livebootstage2" ]; then
-	/usr/local/box-tools/liveboot.sh stage2
+	setsid /usr/local/box-tools/liveboot.sh stage2
 elif [ "$program" = "liveboot" ]; then
-	/usr/local/box-tools/liveboot.sh stage1
+	setsid /usr/local/box-tools/liveboot.sh stage1
 elif [ "$program" = "autoflash" ]; then
-	/usr/local/box-tools/flasher.sh
+	setsid /usr/local/box-tools/flasher.sh
 fi
 
 while true; do
