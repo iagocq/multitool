@@ -67,6 +67,7 @@ chmod -R +x "$ROOTFS_DIR/usr/local/box-tools"
 
 mkdir -p "$ROOTFS_DIR/mnt"
 mkdir -p "$ROOTFS_DIR/newroot"
+ln -s /proc/mounts "$ROOTFS_DIR/etc/mtab"
 
 # Once we're in chroot, root / directory is rootfs
 chroot rootfs /bin/qemu-arm-static /bin/bash /tmp/configure.sh

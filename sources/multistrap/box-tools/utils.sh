@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-BOOT_DEBUG=5
 if [ -z "$BOOT_DEBUG" ]; then
-    BOOT_DEBUG=5
+    BOOT_DEBUG=0
 fi
 
 # debug code inspired by debian's initramfs init

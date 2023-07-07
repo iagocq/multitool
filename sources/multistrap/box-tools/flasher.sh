@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 
-BOOT_DEBUG=5
 . /usr/local/box-tools/utils.sh
-set -x
 
-sleep 30
+echo "waiting 10 seconds"
+sleep 10
 
 if [ -e "/mnt/flash.conf" ]; then
     source /mnt/flash.conf
@@ -68,13 +67,14 @@ while [ "$file_size" = "" ]; do
 done
 
 if [ "$tar_process" ]; then
-    parted "$output" -- mklabel msdos mkpart 8192 100%
+    parted -s "$output" -- mklabel msdos
+    parted -s "$output" -- mkpart primary ext4 8192s 100%
     device="$(losetup -o $((8192*512)) --find --show "$output")"
     mkfs.ext4 -F $device
     mkdir /tmp/flash
     mount "$device" /tmp/flash
     unset file_size
-    eval $tar_cmd | grep -Eo '^./[a-z0-9\-_]+/[a-z0-9\-_]+' | stdbuf --output=L uniq > /tmp/comm2 &
+    eval $tar_cmd | grep -Eo '^(./)?([a-z0-9\-_]+/){1,3}' | sed -e 's|^\.||' -e 's|/$||' | stdbuf --output=L uniq > /tmp/comm2 &
 else
     eval $file_command | pv -b -n > >(dd of=$output conv=fsync 2> /dev/null) 2> /tmp/comm2 &
 fi
@@ -82,14 +82,22 @@ fi
 sts=0
 while [ $sts = 0 ]; do
     read
-    [ -z "$REPLY" ] && echo done && break
+    [ -z "$REPLY" ] && break
     echo progress $REPLY $file_size
 done < /tmp/comm2 >> /tmp/comm
 
 if [ "$tar_process" ]; then
+    cp /tmp/flash/boot.img /tmp/flash/boot/armbianEnv.txt /tmp
+    rm /tmp/flash/boot.img
     umount /tmp/flash
+    dd if=/tmp/boot.img of=$output skip=1 seek=1 conv=fsync
+    e2fsck -f /dev/loop0
+    tune2fs -U $(grep rootdev /tmp/armbianEnv.txt | sed -e 's|rootdev=UUID=||') $device
+    losetup -d $device
+    sync $output
 fi
 
+echo done  >> /tmp/comm
 echo done
 sleep 1
 [ "$nc_proc" ] && kill $nc_proc
