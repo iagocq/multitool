@@ -159,13 +159,14 @@ if [[ $? -eq 0 ]]; then
 	dmesg > /mnt/dmesg.multitool.log
 fi
 
+export BOOT_DEBUG
 debugshell "before program"
 if [ "$livebootstage2" ]; then
-	setsid /usr/local/box-tools/liveboot.sh stage2
+	setsid /usr/local/box-tools/liveboot.sh stage2 <> /dev/tty1 >&0 2>&1
 elif [ "$program" = "liveboot" ]; then
-	setsid /usr/local/box-tools/liveboot.sh stage1
+	setsid /usr/local/box-tools/liveboot.sh stage1 <> /dev/tty1 >&0 2>&1
 elif [ "$program" = "autoflash" ]; then
-	setsid /usr/local/box-tools/flasher.sh
+	setsid /usr/local/box-tools/flasher.sh <> /dev/tty1 >&0 2>&1
 fi
 
 while true; do
