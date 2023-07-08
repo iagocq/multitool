@@ -6,9 +6,22 @@ CONF_FILE=${1:-/mnt/flash.conf}
 IP_WAIT_MAX=30
 INTERFACE=eth0
 MNT_OUTPUT_DIR=/tmp/flash
-LOG_LEVEL=0
+LOG_LEVEL=${LOG_LEVEL:-1}
 
 declare -A FLASH_CONF
+declare -A COLORS
+
+COLORS=(
+    [GREY]='\033[0;37m'
+    [WHITE]='\033[1;37m'
+    [YELLOW]='\033[1;33m'
+    [RED]='\033[1;31m'
+    [CYAN]='\033[1;36m'
+    [RESET]='\033[0m'
+)
+
+[ -t 1 ] && SUPPORTS_COLORS_TEST=1
+SUPPORTS_COLORS=${SUPPORTS_COLORS:-$SUPPORTS_COLORS_TEST}
 
 valid_ip_port() {
     ip="$1"
@@ -24,14 +37,18 @@ start_logger() {
 
     {
         coproc STDOUT_COPROC {
-            while read -r; do
-                _sub_log "STDOUT" "$REPLY" 11
-            done
+            if [ "$LOG_LEVEL" -le 1 ]; then
+                while read -r; do
+                    _sub_log "STDOUT" "$REPLY" 11 'CYAN'
+                done
+            fi
         }
 
         coproc STDERR_COPROC {
             while read -r; do
-                _sub_log "STDERR" "$REPLY" 12
+                if [ "$LOG_LEVEL" -le 3 ]; then
+                    _sub_log "STDERR" "$REPLY" 12 'CYAN'
+                fi
             done
         }
     } 2> /dev/null
@@ -48,8 +65,12 @@ _sub_log() {
     svtxt="$1"
     message="$2"
     fd="$3"
+    color="${COLORS[$4]}"
+    reset_color="${COLORS[RESET]}"
     date="$(date +%H:%M:%S)"
+    [ "$SUPPORTS_COLORS" ] && printf "$color" >&"$fd"
     printf '[%s] [%-6s] %s\n' "$date" "$svtxt" "$message" >&"$fd"
+    [ "$SUPPORTS_COLORS" ] && printf "$reset_color" >&"$fd"
 }
 
 log() {
@@ -58,13 +79,13 @@ log() {
     svtxt="UNKN"
     fd=11
     lvl=0
-    [ "$severity" = D ] && lvl=0 && svtxt="DEBUG"
-    [ "$severity" = I ] && lvl=1 && svtxt="INFO"
-    [ "$severity" = W ] && lvl=2 && svtxt="WARN"
-    [ "$severity" = E ] && lvl=3 && svtxt="ERROR"
+    [ "$severity" = D ] && color=GREY && lvl=0 && svtxt="DEBUG"
+    [ "$severity" = I ] && color=WHITE && lvl=1 && svtxt="INFO"
+    [ "$severity" = W ] && color=YELLOW && lvl=2 && svtxt="WARN"
+    [ "$severity" = E ] && color=RED && lvl=3 && svtxt="ERROR"
     [ "$lvl" -ge 2 ] && fd=12
     if [ "$lvl" -ge "$LOG_LEVEL" ]; then
-        _sub_log "$svtxt" "$message" "$fd"
+        _sub_log "$svtxt" "$message" "$fd" "$color"
     fi
 }
 
