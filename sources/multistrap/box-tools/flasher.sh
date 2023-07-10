@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-# . /usr/local/box-tools/utils.sh
-
 CONF_FILE=${1:-/mnt/flash.conf}
+PATHS_RELATIVE_TO=${2:-/mnt}
 IP_WAIT_MAX=30
 INTERFACE=eth0
 MNT_OUTPUT_DIR=/tmp/flash
@@ -37,11 +36,11 @@ start_logger() {
 
     {
         coproc STDOUT_COPROC {
-            if [ "$LOG_LEVEL" -le 1 ]; then
-                while read -r; do
+            while read -r; do
+                if [ "$LOG_LEVEL" -le 1 ]; then
                     _sub_log "STDOUT" "$REPLY" 11 'CYAN'
-                done
-            fi
+                fi
+            done
         }
 
         coproc STDERR_COPROC {
@@ -174,6 +173,8 @@ load_config() {
         FLASH_CONF["${conf[0]}"]="${conf[1]}"
     done
 
+    FLASH_CONF[file]="$PATHS_RELATIVE_TO/${FLASH_CONF[file]}"
+
     exec 7<&-
 }
 
@@ -294,7 +295,7 @@ wait_for_ip() {
     interface="$1"
     wait_max="$2"
     for _ in $(seq 1 "$wait_max"); do
-        if ip addr show dev "$interface" | grep 'inet ' | grep -v ' 169\.254' > /dev/null; then
+        if ip -4 -oneline addr show dev "$interface" | grep -v ' 169\.254' > /dev/null; then
             return 0
         fi
         sleep 1
