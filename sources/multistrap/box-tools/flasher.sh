@@ -221,7 +221,7 @@ finish_tar() {
     debug umount "$MNT_OUTPUT_DIR"
 
     log I "running fsck"
-    debug e2fsck -f "$output_device"
+    debug e2fsck -y -f "$loop_device"
     if [ "$UUID" ]; then
         debug tune2fs -U "$UUID" "$loop_device"
     fi
@@ -277,15 +277,15 @@ build_pipeline() {
 do_install() {
     if [ "$setup_command" ]; then
         log I "Setting up"
-        eval "$setup_command"
+        debug eval "$setup_command"
     fi
     if [ "$install_command" ]; then
         log I "Installing"
-        eval "$install_command"
+        debug eval "$install_command"
     fi
     if [ "$finish_command" ]; then
         log I "Finishing"
-        eval "$finish_command"
+        debug eval "$finish_command"
     fi
 
     finish_progress
